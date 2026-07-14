@@ -9,8 +9,8 @@ export const SITE = {
   description:
     "ABABIL is an all-in-one platform for digital services, natural products, a free Islamic PDF library, and helpful blogs.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
-  whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "",
-  phone: process.env.NEXT_PUBLIC_CONTACT_PHONE ?? "",
+  whatsapp: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "919083389670",
+  phone: process.env.NEXT_PUBLIC_CONTACT_PHONE ?? "+919083389670",
   email: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "hello@ababil.example",
 } as const;
 
