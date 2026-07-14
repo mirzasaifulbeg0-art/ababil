@@ -1,0 +1,500 @@
+// ============================================================================
+// ABABIL — Complete database architecture (Prisma + PostgreSQL)
+// ============================================================================
+// This single file defines every table and relationship in the database.
+// After the database is set up you turn it into real tables with:
+//     npx prisma migrate dev --name init
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS  (fixed sets of allowed values — the DB rejects anything else)
+// ============================================================================
+
+// The user's permission level. "Role" from your list lives here.
+enum Role {
+  USER
+  ADMIN
+}
+
+// Lifecycle of a digital-service application.
+enum ServiceRequestStatus {
+  SUBMITTED
+  IN_REVIEW
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+// Lifecycle of a product order.
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+// Payment state, tracked separately from fulfilment.
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  RAZORPAY
+  STRIPE
+  COD
+}
+
+// Language of an Islamic library book.
+enum BookLanguage {
+  ARABIC
+  ENGLISH
+  BENGALI
+  URDU
+  HINDI
+  OTHER
+}
+
+// ============================================================================
+// 1. USERS & AUTH
+//    Core: User, Notification.  Supporting (required by NextAuth): Account,
+//    Session, VerificationToken.
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique // CONSTRAINT: no two users share an email
+  emailVerified DateTime?
+  password      String? // bcrypt hash; null for social logins
+  image         String?
+  phone         String?
+  role          Role      @default(USER) // uses the Role enum above
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- relationships (one User has many …) ---
+  accounts        Account[]
+  sessions        Session[]
+  serviceRequests ServiceRequest[]
+  orders          Order[]
+  reviews         Review[]
+  wishlist        Wishlist[]
+  cartItems       CartItem[]
+  downloads       DownloadHistory[]
+  comments        Comment[]
+  notifications   Notification[]
+  blogs           Blog[] // posts this user authored (admins)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId]) // one link per external account
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String   @db.Text
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================================================
+// 2. DIGITAL SERVICES
+//    Core: DigitalService, ServiceCategory.  Supporting: ServiceRequest.
+// ============================================================================
+
+model ServiceCategory {
+  id       String           @id @default(cuid())
+  name     String           @unique
+  slug     String           @unique
+  services DigitalService[]
+}
+
+model DigitalService {
+  id                String  @id @default(cuid())
+  name              String
+  slug              String  @unique
+  shortDescription  String
+  description       String  @db.Text
+  requiredDocuments String  @db.Text
+  eligibility       String  @db.Text
+  processingTime    String // e.g. "3-5 working days"
+  serviceCharge     Decimal @db.Decimal(10, 2) // money: exact decimals
+  icon              String?
+  isActive          Boolean @default(true)
+  isFeatured        Boolean @default(false)
+
+  categoryId String?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  requests  ServiceRequest[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model ServiceRequest {
+  id        String               @id @default(cuid())
+  serviceId String
+  userId    String?
+  fullName  String
+  phone     String
+  email     String?
+  notes     String?              @db.Text
+  formData  Json? // flexible per-service fields
+  status    ServiceRequestStatus @default(SUBMITTED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service DigitalService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([serviceId])
+  @@index([userId])
+  @@index([status])
+}
+
+// ============================================================================
+// 3. NATURAL PRODUCTS (eCommerce)
+//    Core: Product, ProductCategory, Order, OrderItem, Review, Wishlist.
+//    Supporting: ProductImage, CartItem.
+// ============================================================================
+
+model ProductCategory {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  name           String
+  slug           String  @unique
+  description    String  @db.Text
+  benefits       String? @db.Text
+  ingredients    String? @db.Text
+  price          Decimal @db.Decimal(10, 2)
+  compareAtPrice Decimal? @db.Decimal(10, 2)
+  stock          Int     @default(0) // stock status is derived from this
+  isActive       Boolean @default(true)
+  isFeatured     Boolean @default(false)
+
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  images     ProductImage[]
+  reviews    Review[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  wishlist   Wishlist[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isFeatured])
+  @@index([isActive])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  position  Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  rating    Int // 1..5 (validated in application code)
+  comment   String   @db.Text
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId]) // CONSTRAINT: one review per user per product
+  @@index([productId])
+}
+
+model CartItem {
+  id        String @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int    @default(1)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId]) // one row per product in a user's cart
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId]) // can't wishlist the same product twice
+  @@index([userId])
+}
+
+model Order {
+  id            String         @id @default(cuid())
+  orderNumber   String         @unique // e.g. ABABIL-000123
+  userId        String?
+  status        OrderStatus    @default(PENDING)
+  paymentStatus PaymentStatus  @default(PENDING)
+  paymentMethod PaymentMethod?
+  paymentId     String? // gateway reference
+
+  subtotal Decimal @db.Decimal(10, 2)
+  shipping Decimal @default(0) @db.Decimal(10, 2)
+  total    Decimal @db.Decimal(10, 2)
+
+  // Shipping address is SNAPSHOTTED so past orders never change.
+  customerName  String
+  customerEmail String
+  customerPhone String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  postalCode    String
+  country       String  @default("India")
+
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String?
+  name      String // snapshot of product name at purchase time
+  price     Decimal @db.Decimal(10, 2) // snapshot of price paid
+  quantity  Int
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+// ============================================================================
+// 4. ISLAMIC LIBRARY
+//    Core: IslamicBook, BookCategory.  Supporting: DownloadHistory.
+// ============================================================================
+
+model BookCategory {
+  id    String        @id @default(cuid())
+  name  String        @unique
+  slug  String        @unique
+  books IslamicBook[]
+}
+
+model IslamicBook {
+  id            String       @id @default(cuid())
+  title         String
+  slug          String       @unique
+  author        String
+  language      BookLanguage @default(OTHER)
+  description   String       @db.Text
+  coverImage    String?
+  pdfUrl        String // Cloudinary URL (public-domain PDFs only)
+  downloadCount Int          @default(0)
+  isActive      Boolean      @default(true)
+
+  categoryId String?
+  category   BookCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  downloads DownloadHistory[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([categoryId])
+}
+
+model DownloadHistory {
+  id     String  @id @default(cuid())
+  bookId String
+  userId String?
+
+  createdAt DateTime @default(now())
+
+  book IslamicBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([bookId])
+  @@index([userId])
+}
+
+// ============================================================================
+// 5. BLOG
+//    Core: Blog, BlogCategory.  Supporting: BlogTag, Comment.
+// ============================================================================
+
+model BlogCategory {
+  id    String @id @default(cuid())
+  name  String @unique
+  slug  String @unique
+  posts Blog[]
+}
+
+model BlogTag {
+  id    String @id @default(cuid())
+  name  String @unique
+  slug  String @unique
+  posts Blog[]
+}
+
+model Blog {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  excerpt     String
+  content     String    @db.Text
+  coverImage  String?
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+
+  // SEO fields
+  metaTitle       String?
+  metaDescription String?
+
+  authorId   String?
+  author     User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  categoryId String?
+  category   BlogCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  tags     BlogTag[]
+  comments Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([published])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String?
+  guestName String?
+  content   String   @db.Text
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  post Blog  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+}
+
+// ============================================================================
+// 6. CONTACT & HOMEPAGE
+//    Core: ContactMessage.  Supporting: Testimonial (homepage reviews).
+// ============================================================================
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String   @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read])
+}
+
+model Testimonial {
+  id       String   @id @default(cuid())
+  name     String
+  role     String? // e.g. "Verified Customer"
+  avatar   String?
+  rating   Int      @default(5)
+  content  String   @db.Text
+  isActive Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+}
