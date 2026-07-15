@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { MediaUpload } from "@/components/admin/media-upload";
 import { saveBlog } from "@/lib/actions/admin";
 
 type Category = { id: string; name: string };
@@ -63,16 +64,13 @@ export function BlogForm({
         />
       </div>
 
-      <div>
-        <Label htmlFor="coverImage">Cover image URL</Label>
-        <Input
-          id="coverImage"
-          name="coverImage"
-          type="url"
-          placeholder="https://..."
-          defaultValue={d.coverImage ?? ""}
-        />
-      </div>
+      <MediaUpload
+        name="coverImage"
+        label="Cover image"
+        kind="image"
+        defaultValue={d.coverImage ?? ""}
+        helpText="Displayed at the top of the post and in blog listings."
+      />
 
       <div>
         <Label htmlFor="categoryId">Category</Label>

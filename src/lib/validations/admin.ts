@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const optionalString = z.string().trim().optional().or(z.literal(""));
 
+/** Accepts a full http(s) URL or a site-relative upload path like /uploads/x.pdf. */
+const urlOrPath = z
+  .string()
+  .trim()
+  .refine(
+    (v) => v.startsWith("/") || /^https?:\/\//i.test(v),
+    "Enter a valid URL or upload a file"
+  );
+
 // --- Product -----------------------------------------------------------------
 export const productSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
@@ -42,7 +51,7 @@ export const bookSchema = z.object({
     .default("OTHER"),
   description: z.string().trim().min(5, "Description is required"),
   coverImage: optionalString,
-  pdfUrl: z.string().trim().url("Enter a valid PDF URL"),
+  pdfUrl: urlOrPath,
   categoryId: optionalString,
   isActive: z.coerce.boolean().default(true),
 });

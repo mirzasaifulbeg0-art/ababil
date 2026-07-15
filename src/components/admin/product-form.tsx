@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { MediaUpload } from "@/components/admin/media-upload";
 import { saveProduct } from "@/lib/actions/admin";
 
 type Category = { id: string; name: string };
@@ -127,16 +128,13 @@ export function ProductForm({
         </Select>
       </div>
 
-      <div>
-        <Label htmlFor="imageUrl">Image URL</Label>
-        <Input
-          id="imageUrl"
-          name="imageUrl"
-          type="url"
-          placeholder="https://res.cloudinary.com/..."
-          defaultValue={d.imageUrl ?? ""}
-        />
-      </div>
+      <MediaUpload
+        name="imageUrl"
+        label="Product image"
+        kind="image"
+        defaultValue={d.imageUrl ?? ""}
+        helpText="Shown on the product card and detail page."
+      />
 
       <div className="flex flex-wrap gap-6">
         <label className="flex items-center gap-2 text-sm text-brand-navy-800">

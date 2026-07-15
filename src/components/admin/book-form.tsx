@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { MediaUpload } from "@/components/admin/media-upload";
 import { saveBook } from "@/lib/actions/admin";
 
 type Category = { id: string; name: string };
@@ -87,28 +88,23 @@ export function BookForm({
         />
       </div>
 
-      <div>
-        <Label htmlFor="coverImage">Cover image URL</Label>
-        <Input
-          id="coverImage"
-          name="coverImage"
-          type="url"
-          placeholder="https://..."
-          defaultValue={d.coverImage ?? ""}
-        />
-      </div>
+      <MediaUpload
+        name="coverImage"
+        label="Cover image"
+        kind="image"
+        defaultValue={d.coverImage ?? ""}
+        helpText="Book cover shown in the library."
+      />
 
-      <div>
-        <Label htmlFor="pdfUrl">PDF URL</Label>
-        <Input
-          id="pdfUrl"
-          name="pdfUrl"
-          type="url"
-          placeholder="https://res.cloudinary.com/....pdf"
-          defaultValue={d.pdfUrl ?? ""}
-          required
-        />
-      </div>
+      <MediaUpload
+        name="pdfUrl"
+        label="Book PDF"
+        kind="file"
+        accept="application/pdf"
+        required
+        defaultValue={d.pdfUrl ?? ""}
+        helpText="The downloadable/readable PDF file. Required."
+      />
 
       <div>
         <Label htmlFor="categoryId">Category</Label>
